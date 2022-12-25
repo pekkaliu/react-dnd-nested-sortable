@@ -1,7 +1,7 @@
-import { useSensors, useSensor, MouseSensor, TouchSensor,  MeasuringStrategy, DragOverlay, DndContext, UniqueIdentifier } from "@dnd-kit/core";
-import { arrayMove, SortableContext } from "@dnd-kit/sortable";
+import { useSensors, useSensor, MouseSensor, TouchSensor, MeasuringStrategy, DragOverlay, DndContext, UniqueIdentifier, closestCorners } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Box, Portal } from "@mantine/core";
-import { useEffect,  useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { dropAnimationConfig } from "./sortableUtils";
 import { DragOverlayItem, DragOverlayGroup } from "./Item";
 import SortableGroup from "./SortableGroup";
@@ -13,11 +13,11 @@ export enum TYPES {
 
 const ToolContainer: any = () => {
 
-    const data:any = {
+    const data: any = {
         groups: {
             0: [1, 3, 4, 6],
-            1: [2],
-            //5: [7]
+            1: [2, 5],
+            5: [7]
         },
         items: {
             0: { type: TYPES.Group },
@@ -32,14 +32,15 @@ const ToolContainer: any = () => {
         }
     }
     const [activeId, setActiveId] = useState(null);
-    const [items, setItems] = useState(data.items)
     const [groups, setGroups] = useState(data.groups)
+
+    //const r_groups = useRef(data.groups)
     const sensors = useSensors(
         useSensor(MouseSensor),
         useSensor(TouchSensor)
     );
 
-    useEffect(() => console.log(groups), [groups])
+    const memoGroups = useMemo(() => groups, [groups])
 
     return <Box
         sx={{
@@ -49,7 +50,7 @@ const ToolContainer: any = () => {
         }}>
         <DndContext
             sensors={sensors}
-            //collisionDetection={collisionDetectionStrategy}
+            //collisionDetection={closestCorners}
             measuring={{
                 droppable: {
                     strategy: MeasuringStrategy.Always,
@@ -60,7 +61,7 @@ const ToolContainer: any = () => {
                     }
                 }
             }}
-            onDragStart={({ active }:any) => {
+            onDragStart={({ active }: any) => {
                 setActiveId(active.id);
             }}
             onDragOver={onDragOver}
@@ -70,12 +71,13 @@ const ToolContainer: any = () => {
         >
             <SortableContext
                 items={[0]}
-            //strategy={verticalListSortingStrategy}
+                strategy={verticalListSortingStrategy}
             >
                 <SortableGroup
                     groupId={0}
-                    groups={groups}
+                    groups={memoGroups}
                     parentId={null}
+                    index={1}
                 />
             </SortableContext>
 
@@ -91,8 +93,8 @@ const ToolContainer: any = () => {
                         /> :
                         <DragOverlayGroup
                             dragOverlay
-                            groupItems={groups[activeId || 0]}
-                            items={items}
+                            groups={memoGroups}
+                            items={data.items}
                             groupId={activeId}
                         />}
                 </DragOverlay>
@@ -101,34 +103,39 @@ const ToolContainer: any = () => {
 
     </Box >
 
-    function onDragEnd({ active, over }:any) {
+    function onDragEnd({ active, over }: any) {
+
+        if (activeId !== null && over && active?.id !== over?.id) {
+            const overId = over.id
+            const { isContainer: overIsContainer, parentId: overParentId } = over.data.current;
+            const { isContainer: activeIsContainer, parentId: activeParentId } = active.data.current;
+            // move inside container
+            if (overParentId === activeParentId && data.items[overId].type !== TYPES.Group) {
+
+                console.log('move inside container. overType', overId, data.items[overId].type)
+                const activeIndex = groups[activeParentId].indexOf(active.id);
+                const overIndex = groups[overParentId || 0].indexOf(over.id);
+                setGroups({
+                    ...groups,
+                    [overParentId]: arrayMove(groups[overParentId || 0], activeIndex, overIndex)
+                })
+                return
+            }
+        }
         setActiveId(null)
     }
-    
 
-    function onDragOver({ active, over }:any) {
+
+    function onDragOver({ active, over }: any) {
         if (activeId !== null && over && active?.id !== over?.id) {
             const overId = over.id
             const { isContainer: overIsContainer, parentId: overParentId } = over.data.current;
             const { isContainer: activeIsContainer, parentId: activeParentId } = active.data.current;
 
-
             // skip if active is over child item
             if (activeIsContainer && groups[activeId].includes(overId))
                 return;
 
-            // move inside container
-            if (overParentId === activeParentId && items[overId].type !== TYPES.Group) {
-
-                console.log('move inside container. overType', overId, items[overId].type)
-                const activeIndex = groups[activeParentId].indexOf(active.id);
-                const overIndex = groups[overParentId || 0].indexOf(over.id);
-                setGroups((groups:any) => ({
-                    ...groups,
-                    [overParentId]: arrayMove(groups[overParentId || 0], activeIndex, overIndex)
-                }))
-                return
-            }
 
 
             //move to container when:
@@ -148,11 +155,11 @@ const ToolContainer: any = () => {
                         groups[overId].length
                     )
                 ]
-                setGroups((groups:any) => ({
+                setGroups({
                     ...groups,
                     [activeParentId]: groups[activeParentId].filter((id: UniqueIdentifier) => id !== activeId),
                     [overId]: newOverGroup
-                }))
+                })
                 return;
             }
 
@@ -160,7 +167,7 @@ const ToolContainer: any = () => {
             if (!overIsContainer && !groups[overParentId].includes(activeId)) {
                 const overIndex = groups[overParentId].indexOf(overId)
 
-                setGroups((groups:any) => ({
+                setGroups({
                     ...groups,
                     [activeParentId]: groups[activeParentId].filter((id: UniqueIdentifier) => id !== activeId),
                     [overParentId]: [
@@ -170,7 +177,7 @@ const ToolContainer: any = () => {
                             overIndex,
                             groups[overParentId].length
                         )]
-                }))
+                })
                 return;
             }
 

@@ -5,10 +5,11 @@ import Item from "./Item";
 import { useToolStyle } from "./SortableGroup";
 import { CSS } from '@dnd-kit/utilities';
 import { animateLayoutChanges } from "./sortableUtils";
+import { useRef, useEffect, useMemo } from "react";
 
 
 
-const SortableVariableItem: any = ({ id, parentId }: any) => {
+const SortableVariableItem: any = ({ id, parentId, index, disableChilds }: any) => {
     const {
         attributes,
         listeners,
@@ -19,6 +20,7 @@ const SortableVariableItem: any = ({ id, parentId }: any) => {
         active
     } = useSortable({
         id,
+        disabled: disableChilds,
         data: { isContainer: false, parentId },
         animateLayoutChanges
     });
@@ -30,21 +32,30 @@ const SortableVariableItem: any = ({ id, parentId }: any) => {
         opacity: activeItemClass
     };
 
-    const { classes, theme } = useToolStyle()
+    const renderCountRef = useRef(0)
 
-    return <Item ref={setNodeRef} style={style} {...attributes} >
-        <Box className={classes.valueRowCol}>
-            <ActionIcon
-                variant="subtle"
-                onClick={() => { }}
-                size={36}
-                ref={setActivatorNodeRef}
-                {...listeners}
-            >
-                <IconGripVertical size={25} color={`${theme.colors.gray[4]}`} />
-            </ActionIcon>
-            <Title order={5}>{id}</Title>
-        </Box>
+    useEffect(() => {
+    })
+
+    const { classes, theme } = useToolStyle()
+    const SItem = useMemo(() => {
+        renderCountRef.current++
+        return <Box className={classes.valueRowCol}>
+        <ActionIcon
+            variant="subtle"
+            onClick={() => { }}
+            size={36}
+            ref={setActivatorNodeRef}
+            {...listeners}
+        >
+            <IconGripVertical size={25} color={`${theme.colors.gray[4]}`} />
+        </ActionIcon>
+        <Title order={5}>{id} {renderCountRef.current}</Title>
+    </Box>
+    },[])
+
+    return <Item ref={setNodeRef} index={index} style={style} {...attributes} >
+        {SItem}
     </Item>
 }
 
