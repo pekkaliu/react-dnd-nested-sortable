@@ -1,21 +1,15 @@
 import { Box, Grid, Stack, Text } from '@mantine/core'
 import type { Identifier, XYCoord } from 'dnd-core'
-import { FC, useCallback } from 'react'
+import { FC } from 'react'
 import { useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
-import useNestedStyle from '../rdnd/useNestedStyle'
-import { UniqueIdentifier } from './Container'
+import useNestedStyle from './useNestedStyle'
+import { transition, UniqueIdentifier } from './Container'
 
 import { ItemTypes } from './ItemTypes'
-import { useToolContext } from './ToolContext'
-/*
-const style = {
-    border: '1px solid blue',
-    padding: '0.5rem 1rem',
-    marginBottom: '.5rem',
-    backgroundColor: 'white',
-    cursor: 'move',
-}*/
+import { useSortableContext } from './SortableContext'
+import { motion, usePresence } from "framer-motion"
+
 
 export interface GroupProps {
     id: any
@@ -31,12 +25,14 @@ interface DragItem {
     id: string
     type: string
     parentId: UniqueIdentifier
+    isPresent: any
 }
 
 
 export const Group: FC<GroupProps> = (props: any) => {
     const { id, text, index, parentId } = props
-    const { itemsData, items, moveToGroup, getAllChildIds } = useToolContext();
+    const { items, activeId, setActiveId, moveToGroup, getAllChildIds } = useSortableContext();
+    const [isPresent, safeToRemove] = usePresence()
 
     const ref = useRef<HTMLDivElement>(null)
     const dragRef = useRef<HTMLDivElement>(null)
@@ -55,6 +51,7 @@ export const Group: FC<GroupProps> = (props: any) => {
             if (!ref.current) {
                 return
             }
+            activeId !== item.index ?? setActiveId(item.index)
             const dragIndex = item.index
             const dragParentId = item.parentId
             const dragType = item.type
@@ -62,7 +59,7 @@ export const Group: FC<GroupProps> = (props: any) => {
             const isOverCurrent = monitor.isOver({ shallow: true })
 
             // Don't replace items with themselves
-            if (item.id === id) {
+            if (item.id === id || !item.isPresent) {
                 return
             }
 
@@ -88,17 +85,6 @@ export const Group: FC<GroupProps> = (props: any) => {
             // Get pixels to the top
             const hoverClientY = (mouseOffset as XYCoord).y - hoverBoundingRect.top
 
-            // Only perform the move when the mouse has crossed half of the items height
-            // When dragging downwards, only move when the cursor is below 50%
-            // When dragging upwards, only move when the cursor is above 50%
-
-            let newIndex = 0
-
-            /*if (hoverClientY > hoverMiddleY) {
-                newIndex = childAmount
-            }*/
-
-            //console.log('newIndex', newIndex)
 
 
             // Time to actually perform the action
@@ -107,15 +93,6 @@ export const Group: FC<GroupProps> = (props: any) => {
                 { groupId: id, groupParentId: parentId, newIndex: 0 },
             )
 
-            // Dragging downwards
-            /*if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) {
-                return
-            }
-
-            // Dragging upwards
-            if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) {
-                return
-            }*/
             // Note: we're mutating the monitor item here!
             // Generally it's better to avoid mutations,
             // but it's good here for the sake of performance
@@ -126,14 +103,15 @@ export const Group: FC<GroupProps> = (props: any) => {
         },
     })
 
-    const [{ isDragging }, drag] = useDrag({
+    const [{ isDragging }, drag, dragPreview] = useDrag({
         type: ItemTypes.GROUP,
         item: () => {
             return {
                 id,
                 index,
                 type: ItemTypes.GROUP,
-                parentId
+                parentId,
+                isPresent: isPresent
             }
         },
         collect: (monitor: any) => ({
@@ -141,18 +119,33 @@ export const Group: FC<GroupProps> = (props: any) => {
         }),
     })
 
-    const opacity = isDragging ? 0.5 : 1
+    const opacity = activeId === id ? 0.5 : 1
     drag(dragRef)
     drop(ref)
 
     const { classes } = useNestedStyle()
 
+    const animations = {
+        layout: true,
+        initial: 'in',
+        animate: isPresent ? 'in' : 'out',
+        whileTap: 'tapped',
+        variants: {
+          in: { opacity: 1, transition: { duration: 0 } },
+          out: { opacity: 0, zIndex: -1, transition: { duration: 0.3 }  },
+        },
+        onAnimationComplete: () => !isPresent && safeToRemove(),
+        transition
+      }
+      
     return (
-        <Box ref={dragRef} className={classes.rootStack} style={{ opacity }} data-handler-id={handlerId}>
+        <Box style={{opacity}} >
+            <motion.div ref={dragRef} {...animations}  className={classes.rootStack} data-handler-id={handlerId}>
+
             <Box className={classes.groupHeader} ref={ref}>
                 <Text>{text}</Text>
             </Box>
-            <Grid grow className={classes.groupGrid}>
+            {items[id].length > 0  && <Grid grow className={classes.groupGrid}>
                 <Grid.Col span="content" className={classes.sidebar}>
                     <Box>
                         {text}
@@ -163,7 +156,8 @@ export const Group: FC<GroupProps> = (props: any) => {
                         {props.children}
                     </Stack>
                 </Grid.Col>
-            </Grid>
+            </Grid>}
+            </motion.div>
         </Box>
     )
 }

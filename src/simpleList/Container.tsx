@@ -1,4 +1,4 @@
-import update from 'immutability-helper'
+
 import { FC, useMemo } from 'react'
 import { useCallback, useState } from 'react'
 import { Group } from './Group'
@@ -6,17 +6,16 @@ import { Card } from './Card'
 
 import { ItemTypes } from './ItemTypes'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Box, Stack } from '@mantine/core'
-import { ToolContextProvider } from './ToolContext'
-import { Motion, spring } from 'react-motion';
+import { Box } from '@mantine/core'
+import { SortableContextProvider } from './SortableContext'
+import { AnimatePresence } from "framer-motion"
 
 
 export type UniqueIdentifier = number | string
 
+export const transition = { type: 'spring', stiffness: 1000, damping: 52 }
+export const transition1 = { type: 'spring', stiffness: 500, damping: 50, mass: 1 }
 
-const style = {
-    width: 400,
-}
 
 export interface Item {
     id: number
@@ -76,14 +75,14 @@ export const Container: FC = () => {
     }), [])
 
     const [items, setItems] = useState({
-        0: [1, 4, 5, 8],
+        0: [1, 4, 5, 6],
         6: [7],
         7: [8],
         2: [3]
     })
 
-    console.log(items)
 
+    const [activeId, setActiveId] = useState(null)
     const getAllChildIds = useCallback((id: UniqueIdentifier) => {
 
         // @ts-ignore
@@ -122,7 +121,7 @@ export const Container: FC = () => {
         )
     }, [])
 
-    const CardMoveToGroup = useCallback((drag: any, hover: any) => {
+    const moveToSameGroup = useCallback((drag: any, hover: any) => {
         const { dragId, dragParentId } = drag
         const { hoverParentId, newIndex } = hover
 
@@ -150,7 +149,7 @@ export const Container: FC = () => {
     const moveCard = useCallback((drag: any, hover: any) => {
         const { hoverIndex, hoverParentId, hoverType } = hover
         const { dragIndex, dragParentId } = drag
-
+        console.log('moveCard')
         // siblings
         if (hoverParentId === dragParentId && hoverType !== ItemTypes.GROUP) {
             setItems((items: any) => ({
@@ -160,11 +159,10 @@ export const Container: FC = () => {
 
             return
         }
-
     }, [])
 
     const renderCard = useCallback(
-        (itemId: UniqueIdentifier, parentId: UniqueIdentifier, index: number, style: any) => {
+        (itemId: UniqueIdentifier, parentId: UniqueIdentifier, index: number) => {
             // @ts-ignore
             const card = itemsData[itemId]
             return (
@@ -173,19 +171,18 @@ export const Container: FC = () => {
                     index={index}
                     parentId={parentId}
                     {...card}
-                    style={style}
                 />
-
             )
         },
         [itemsData],
     )
 
     const renderGroup = useCallback(
-        (itemId: UniqueIdentifier, parentId: UniqueIdentifier, index: number, groupItems: any[]) => {
+        (itemId: UniqueIdentifier, parentId: UniqueIdentifier, index: number) => {
             // @ts-ignore
             const card = itemsData[itemId]
-
+            // @ts-ignore
+            const groupItems = items[itemId]
             return (
                 <Group
                     key={itemId}
@@ -193,22 +190,13 @@ export const Container: FC = () => {
                     {...card}
                     parentId={parentId}
                 >
-
                     {groupItems.map((childId: UniqueIdentifier, i: number) =>
-                        <Motion
-                            key={childId}
-                            defaultStyle={{y: 0}}
-                            style={{ y: spring(i , { stiffness: 1000, damping: 32 }) }}
-                        >
-                            {// @ts-ignore
-                            ({ y }) => itemsData[childId].type === ItemTypes.CARD ?
-                                        renderCard(childId, itemId, i, { transform: 'translate3d(0, ' + y + 'px, 0)', }) :
-                                        // @ts-ignore
-                                        renderGroup(childId, itemId, i, items[childId])
-                                }
-                        </Motion>
+                        // @ts-ignore
+                        itemsData[childId].type === ItemTypes.CARD ?
+                            renderCard(childId, itemId, i) :
+                            // @ts-ignore
+                            renderGroup(childId, itemId, i, items[childId])
                     )}
-
                 </Group>
             )
         },
@@ -219,18 +207,22 @@ export const Container: FC = () => {
         width: 'auto',
         display: 'flex',
     }}>
-        <ToolContextProvider value={{
+        <SortableContextProvider value={{
             itemsData,
             items,
+            activeId, 
+            setActiveId: (id:any) =>  setActiveId(id),
             moveCard,
             moveToGroup,
-            CardMoveToGroup,
+            moveToSameGroup,
             getAllChildIds
         }}>
-            {
-                // @ts-ignore
-                renderGroup(0, 'root', 0, items[0])}
-        </ToolContextProvider>
+            <AnimatePresence initial={false}>
+                {
+                    // @ts-ignore
+                    renderGroup(0, 'root', 0, items[0])}
+            </AnimatePresence>
+        </SortableContextProvider>
     </Box>
 
 }

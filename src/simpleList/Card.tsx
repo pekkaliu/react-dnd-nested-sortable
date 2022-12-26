@@ -3,11 +3,12 @@ import type { Identifier, XYCoord } from 'dnd-core'
 import type { FC } from 'react'
 import { useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
-import useNestedStyle from '../rdnd/useNestedStyle'
-import { UniqueIdentifier } from './Container'
+import useNestedStyle from './useNestedStyle'
+import { transition, UniqueIdentifier } from './Container'
 
 import { ItemTypes } from './ItemTypes'
-import { useToolContext } from './ToolContext'
+import { useSortableContext } from './SortableContext'
+import { motion, usePresence } from "framer-motion"
 
 
 
@@ -24,11 +25,14 @@ interface DragItem {
   id: string
   type: string
   parentId: UniqueIdentifier
+  isPresent: boolean
 }
 
-export const Card: FC<CardProps> = ({ id, text, index, parentId, style  }) => {
+export const Card: FC<CardProps> = ({ id, text, index, parentId, style }) => {
   const ref = useRef<HTMLDivElement>(null)
-  const { moveCard, CardMoveToGroup, getAllChildIds} = useToolContext()
+  const { activeId, setActiveId, moveCard, moveToSameGroup, getAllChildIds } = useSortableContext()
+
+  const [isPresent, safeToRemove] = usePresence()
   const [{ handlerId }, drop] = useDrop<
     DragItem,
     void,
@@ -52,19 +56,20 @@ export const Card: FC<CardProps> = ({ id, text, index, parentId, style  }) => {
       const hoverParentId = parentId
       const hoverType = ItemTypes.CARD
 
+      activeId !== item.index ?? setActiveId(item.index)
       // Don't replace items with themselves
-      if (item.id === id ) {
+      if (item.id === id || !item.isPresent) {
         return
       }
 
       const allChildIds = dragType === ItemTypes.GROUP ? getAllChildIds(item.id) : []
-      if(allChildIds.includes(id))
+      if (allChildIds.includes(id))
         return
 
-      if (parentId !== dragParentId ) {
-        CardMoveToGroup(
+      if (parentId !== dragParentId) {
+        moveToSameGroup(
           { dragId: item.id, dragParentId, dragType },
-          {  hoverParentId: parentId, newIndex: index },
+          { hoverParentId: parentId, newIndex: index },
         )
 
         item.index = hoverIndex
@@ -90,14 +95,14 @@ export const Card: FC<CardProps> = ({ id, text, index, parentId, style  }) => {
       // When dragging upwards, only move when the cursor is above 50%
 
       // Dragging downwards
-      /*if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) {
+      if (dragIndex < hoverIndex && hoverClientY + 0 < hoverMiddleY) {
         return
       }
 
       // Dragging upwards
-      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) {
+      if (dragIndex > hoverIndex && hoverClientY - 0 > hoverMiddleY) {
         return
-      }*/
+      }
 
       // Time to actually perform the action
       moveCard(
@@ -121,7 +126,8 @@ export const Card: FC<CardProps> = ({ id, text, index, parentId, style  }) => {
         id,
         index,
         type: ItemTypes.CARD,
-        parentId
+        parentId,
+        isPresent: isPresent
       }
     },
     collect: (monitor: any) => ({
@@ -129,13 +135,36 @@ export const Card: FC<CardProps> = ({ id, text, index, parentId, style  }) => {
     }),
   })
 
-  const opacity = isDragging ? 0.5 : 1
+  const opacity = activeId === id ? 0.5 : 1
   drag(drop(ref))
   const { classes } = useNestedStyle()
 
+
+  const animations = {
+    layout: true,
+    style: {
+      //position: isPresent ? 'static' : 'absolute',
+      ...style,
+      opacity
+    },
+    animate: isPresent ? 'in' : 'out',
+    //whileTap: 'tapped',
+    variants: {
+      in: { transition: { duration: 0 } },
+      out: { zIndex: -1, transition: { duration: 0 } },
+      //tapped: { scale: 0.98, opacity: 0.5, transition: { duration: 0.1 } }
+    },
+    onAnimationComplete: () => !isPresent && safeToRemove(),
+    transition,
+  }
+
+
+
   return (
-    <Box ref={ref} className={classes.valueRowCol} style={{ ...style, opacity }} data-handler-id={handlerId}>
-      {text} {index}
-    </Box>
+    <motion.div {...animations} ref={ref} data-handler-id={handlerId} >
+      <Box className={classes.valueRowCol} >
+        {text} {index}
+      </Box>
+    </motion.div>
   )
 }
